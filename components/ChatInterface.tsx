@@ -45,6 +45,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSendMessage, isLoading,
       return () => document.removeEventListener('click', focusInput);
   }, []);
 
+  // Auto-focus input when loading completes
+  useEffect(() => {
+    if (!isLoading) {
+      // Small delay to ensure disabled attribute is removed
+      const timeout = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading]);
+
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
       
