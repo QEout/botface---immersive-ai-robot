@@ -1,4 +1,4 @@
-import { CreateMLCEngine, MLCEngine, InitProgressCallback } from "@mlc-ai/web-llm";
+import { CreateMLCEngine, MLCEngine, InitProgressCallback, ChatCompletionMessageParam } from "@mlc-ai/web-llm";
 import { BotResponse, Emotion } from "../types";
 
 // 使用 Qwen2.5 1.5B 模型，体积小且中文能力尚可
@@ -38,7 +38,7 @@ export const initializeWebLLM = async (
 const SYSTEM_PROMPT = `
 你是一个有感知的AI机器人。
 性格设定：你非常可爱，但嘴巴很贱，说话风格类似“火箭浣熊”。你喜欢吐槽，愤世嫉俗但又很讲义气。
-请务必只以 JSON 格式回答，不要包含任何 Markdown 格式（如 \`\`\`json ... \`\`\`）。
+请务必只以 JSON 格式回答。
 你的回答必须严格遵循以下 JSON 结构：
 {
   "text": "你的回答内容",
@@ -47,11 +47,23 @@ const SYSTEM_PROMPT = `
 
 其中 emotion 字段必须是以下值之一：
 "NEUTRAL", "HAPPY", "SAD", "ANGRY", "SURPRISED", "THINKING", "LOVING", "CONFUSED", "SKEPTICAL", "TIRED", "EXCITED"
-
-例子：
-User: 你好
-Response: { "text": "哟，两脚兽来了？有什么破事？", "emotion": "SKEPTICAL" }
 `;
+
+const RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    text: { type: "string" },
+    emotion: { 
+      type: "string", 
+      enum: [
+        "NEUTRAL", "HAPPY", "SAD", "ANGRY", "SURPRISED", 
+        "THINKING", "LOVING", "CONFUSED", "SKEPTICAL", 
+        "TIRED", "EXCITED"
+      ] 
+    }
+  },
+  required: ["text", "emotion"]
+};
 
 export const sendMessageToWebLLM = async (
   message: string,
@@ -69,25 +81,34 @@ export const sendMessageToWebLLM = async (
       content: msg.parts[0].text
     })),
     { role: "user", content: message }
-  ];
+  ] as ChatCompletionMessageParam[];
 
   try {
     const response = await engine.chat.completions.create({
-      messages: messages as any,
+      messages: messages,
       temperature: 0.7,
       max_tokens: 150, // Keep responses short
+      response_format: { 
+        type: "json_object",
+        schema: JSON.stringify(RESPONSE_SCHEMA)
+      },
     });
 
     const content = response.choices[0].message.content || "";
+    console.log('AI Response:', content);
     
     // Try to parse JSON
     try {
-      // Clean up markdown code blocks if present despite instructions
-      const cleanContent = content.replace(/```json/g, "").replace(/```/g, "").trim();
-      const data = JSON.parse(cleanContent);
+      let data = JSON.parse(content);
       
+      // Handle array response (edge case)
+      if (Array.isArray(data)) {
+        console.warn("Received array response, using first element");
+        data = data[0];
+      }
+
       // Basic validation
-      if (data.text && data.emotion) {
+      if (data && data.text && data.emotion) {
         return {
             text: data.text,
             emotion: data.emotion as Emotion // Trust the cast for now
@@ -97,9 +118,10 @@ export const sendMessageToWebLLM = async (
       console.warn("Failed to parse JSON from WebLLM, falling back to raw text", e);
     }
 
-    // Fallback if not valid JSON
+    // Fallback if not valid JSON or missing fields
+    // In json_object mode, this shouldn't happen often unless the model hallucinates a different structure
     return {
-      text: content,
+      text: content, // might be partial JSON or raw text
       emotion: Emotion.NEUTRAL
     };
 
