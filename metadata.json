@@ -1,0 +1,5 @@
+{
+  "name": "BotFace - Immersive AI Robot",
+  "description": "An immersive, pure black chat interface featuring a reactive SVG robot face that changes expressions based on the conversation context.",
+  "requestFramePermissions": []
+}
