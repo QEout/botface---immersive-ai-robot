@@ -6,7 +6,7 @@ import { BotResponse, Emotion } from "../types";
 export const AVAILABLE_MODELS = prebuiltAppConfig.model_list
   .map(m => ({
     id: m.model_id,
-    name: m.model_id.split('-').slice(0, 3).join(' ') // Keep full name for search
+    name: m.model_id // Keep full name for search
   }));
 
 // Fallback if list is empty (should not happen with valid config)
