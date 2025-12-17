@@ -18,7 +18,17 @@ const App: React.FC = () => {
   // WebGPU State
   const [isModelReady, setIsModelReady] = useState(false);
   const [loadProgress, setLoadProgress] = useState<string>("等待初始化...");
-  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0]?.id || '');
+  
+  // Load saved model from localStorage on mount
+  const getSavedModel = () => {
+    const saved = localStorage.getItem('selectedModel');
+    if (saved && AVAILABLE_MODELS.find(m => m.id === saved)) {
+      return saved;
+    }
+    return AVAILABLE_MODELS[0]?.id || '';
+  };
+  
+  const [selectedModel, setSelectedModel] = useState(getSavedModel);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
 
@@ -154,6 +164,7 @@ const App: React.FC = () => {
                                   key={model.id}
                                   onClick={() => {
                                       setSelectedModel(model.id);
+                                      localStorage.setItem('selectedModel', model.id);
                                       setShowModelSelector(false);
                                       setModelSearchQuery('');
                                   }}
