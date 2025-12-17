@@ -1,13 +1,21 @@
-import { CreateMLCEngine, MLCEngine, InitProgressCallback, ChatCompletionMessageParam } from "@mlc-ai/web-llm";
+import { CreateMLCEngine, MLCEngine, InitProgressCallback, ChatCompletionMessageParam, prebuiltAppConfig } from "@mlc-ai/web-llm";
 import { BotResponse, Emotion } from "../types";
 
 // 使用 Qwen2.5 1.5B 模型，体积小且中文能力尚可
 // 也可以尝试 Llama-3.2-3B-Instruct-q4f16_1-MLC
-export const AVAILABLE_MODELS = [
-  { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", name: "Qwen 2.5 (1.5B) - Fast" },
-  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", name: "Llama 3.2 (3B) - Smarter" },
-  { id: "RedPajama-INCITE-Chat-3B-v1-q4f16_1-MLC", name: "RedPajama (3B)" },
-];
+export const AVAILABLE_MODELS = prebuiltAppConfig.model_list
+  .map(m => ({
+    id: m.model_id,
+    name: m.model_id.split('-').slice(0, 3).join(' ') // Keep full name for search
+  }));
+
+// Fallback if list is empty (should not happen with valid config)
+if (AVAILABLE_MODELS.length === 0) {
+    AVAILABLE_MODELS.push(
+        { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", name: "Qwen 2.5 (1.5B)" },
+        { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", name: "Llama 3.2 (3B)" }
+    );
+}
 
 let engine: MLCEngine | null = null;
 let currentModelId = AVAILABLE_MODELS[0].id;
@@ -84,18 +92,25 @@ export const sendMessageToWebLLM = async (
   ] as ChatCompletionMessageParam[];
 
   try {
+    const start = performance.now();
     const response = await engine.chat.completions.create({
       messages: messages,
       temperature: 0.7,
-      max_tokens: 150, // Keep responses short
+      max_tokens: 3000, // Keep responses short
       response_format: { 
         type: "json_object",
         schema: JSON.stringify(RESPONSE_SCHEMA)
       },
     });
+    const end = performance.now();
 
     const content = response.choices[0].message.content || "";
+    const usage = response.usage;
+    const generationTime = end - start;
+    const tokensPerSecond = usage ? (usage.completion_tokens / (generationTime / 1000)) : 0;
+
     console.log('AI Response:', content);
+    console.log(`Speed: ${tokensPerSecond.toFixed(2)} tokens/sec`);
     
     // Try to parse JSON
     try {
@@ -111,7 +126,12 @@ export const sendMessageToWebLLM = async (
       if (data && data.text && data.emotion) {
         return {
             text: data.text,
-            emotion: data.emotion as Emotion // Trust the cast for now
+            emotion: data.emotion as Emotion, // Trust the cast for now
+            stats: {
+              tokensPerSecond: parseFloat(tokensPerSecond.toFixed(2)),
+              totalTokens: usage?.total_tokens || 0,
+              generationTime: Math.round(generationTime)
+            }
         };
       }
     } catch (e) {

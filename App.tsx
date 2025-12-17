@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import RobotFace from './components/RobotFace';
 import ChatInterface from './components/ChatInterface';
+import { PerformancePanel } from './components/PerformancePanel';
 import { sendMessageToWebLLM, initializeWebLLM, AVAILABLE_MODELS } from './services/webLlmService';
 import { Emotion, BotResponse } from './types';
 import { InitProgressReport } from '@mlc-ai/web-llm';
@@ -17,8 +18,9 @@ const App: React.FC = () => {
   // WebGPU State
   const [isModelReady, setIsModelReady] = useState(false);
   const [loadProgress, setLoadProgress] = useState<string>("等待初始化...");
-  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0].id);
+  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0]?.id || '');
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
 
   // Initialize WebLLM on mount or model change
   useEffect(() => {
@@ -35,7 +37,7 @@ const App: React.FC = () => {
         setCurrentEmotion(Emotion.SKEPTICAL);
       } catch (e) {
         console.error(e);
-        setLatestResponse({ text: "该死，模型加载失败了。", emotion: Emotion.ANGRY });
+        setLatestResponse({ text: "该死，模型加载失败了：" + e.message, emotion: Emotion.ANGRY });
       }
     };
     init();
@@ -116,34 +118,66 @@ const App: React.FC = () => {
         <RobotFace emotion={currentEmotion} />
       </div>
 
-      {/* Model Selector (Top Right) */}
-      <div className="absolute top-4 right-4 z-50 flex flex-col items-end">
+      {/* Model Selector */}
+      <div className="absolute top-4 left-4 z-50 flex flex-col items-start">
           <button 
-             onClick={() => setShowModelSelector(!showModelSelector)}
+             onClick={() => {
+                 setShowModelSelector(!showModelSelector);
+                 if (!showModelSelector) setModelSearchQuery(''); // Clear search when opening
+             }}
              className="text-xs text-gray-500 hover:text-cyan-400 border border-gray-800 rounded px-2 py-1 bg-black/50 backdrop-blur"
           >
              {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || 'Model'} ▼
           </button>
           
           {showModelSelector && (
-              <div className="mt-2 bg-black/90 border border-gray-800 rounded p-2 flex flex-col gap-1 min-w-[200px]">
-                  {AVAILABLE_MODELS.map(model => (
-                      <button
-                          key={model.id}
-                          onClick={() => {
-                              setSelectedModel(model.id);
-                              setShowModelSelector(false);
-                          }}
-                          className={`text-left text-xs px-2 py-1.5 rounded hover:bg-gray-800 ${
-                              selectedModel === model.id ? 'text-cyan-400 bg-gray-900' : 'text-gray-400'
-                          }`}
-                      >
-                          {model.name}
-                      </button>
-                  ))}
+              <div className="mt-2 bg-black/90 border border-gray-800 rounded p-2 flex flex-col gap-2 min-w-[300px] max-w-[400px]">
+                  {/* Search Input */}
+                  <input
+                      type="text"
+                      placeholder="搜索模型..."
+                      value={modelSearchQuery}
+                      onChange={(e) => setModelSearchQuery(e.target.value)}
+                      className="text-xs px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-gray-300 placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                      onClick={(e) => e.stopPropagation()}
+                  />
+                  
+                  {/* Model List with scroll */}
+                  <div className="flex flex-col gap-1 max-h-[300px] overflow-y-auto pr-1">
+                      {AVAILABLE_MODELS
+                          .filter(model => 
+                              model.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) ||
+                              model.id.toLowerCase().includes(modelSearchQuery.toLowerCase())
+                          )
+                          .map(model => (
+                              <button
+                                  key={model.id}
+                                  onClick={() => {
+                                      setSelectedModel(model.id);
+                                      setShowModelSelector(false);
+                                      setModelSearchQuery('');
+                                  }}
+                                  className={`text-left text-xs px-2 py-1.5 rounded hover:bg-gray-800 transition-colors ${
+                                      selectedModel === model.id ? 'text-cyan-400 bg-gray-900' : 'text-gray-400'
+                                  }`}
+                              >
+                                  {model.name}
+                              </button>
+                          ))}
+                      {AVAILABLE_MODELS.filter(model => 
+                          model.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) ||
+                          model.id.toLowerCase().includes(modelSearchQuery.toLowerCase())
+                      ).length === 0 && (
+                          <div className="text-xs text-gray-500 px-2 py-1.5 text-center">
+                              没有找到匹配的模型
+                          </div>
+                      )}
+                  </div>
               </div>
           )}
       </div>
+
+      <PerformancePanel tokenSpeed={latestResponse?.stats?.tokensPerSecond} />
 
       {/* Loading Progress Overlay (Only when not ready) */}
       {!isModelReady && (

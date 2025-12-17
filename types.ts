@@ -21,4 +21,9 @@ export interface ChatMessage {
 export interface BotResponse {
   text: string;
   emotion: Emotion;
+  stats?: {
+    tokensPerSecond: number;
+    totalTokens: number;
+    generationTime: number; // ms
+  };
 }
